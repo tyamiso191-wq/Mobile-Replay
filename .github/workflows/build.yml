@@ -28,7 +28,7 @@ jobs:
           fi
           echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -39,7 +39,19 @@ jobs:
 
       - name: Build
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle build --no-daemon
+        run: |
+          set +e
+          gradle build --no-daemon --console=plain 2>&1 | tee build.log
+          STATUS=${PIPESTATUS[0]}
+          if [ "$STATUS" -ne 0 ]; then
+            {
+              echo '### Derleme hatalari'
+              echo '```'
+              grep -A3 -E 'error:|What went wrong' build.log | head -n 150
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $STATUS
 
       - name: Upload jar
         uses: actions/upload-artifact@v4
