@@ -1,0 +1,57 @@
+name: Build mod from zip
+
+on:
+  push:
+    paths:
+      - '**.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          set -e
+          ZIP=$(ls *.zip | head -n1)
+          echo "Using $ZIP"
+          mkdir -p _proj
+          unzip -q -o "$ZIP" -d _proj
+          DIR=_proj
+          if [ ! -f "$DIR/build.gradle" ]; then
+            DIR=$(dirname "$(find _proj -maxdepth 3 -name build.gradle | head -n1)")
+          fi
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.2.1
+
+      - name: Build
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle build --no-daemon
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-jar
+          path: ${{ env.PROJECT_DIR }}/build/libs/*.jar
+
+      - name: Publish release
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          files: ${{ env.PROJECT_DIR }}/build/libs/*.jar
+          
